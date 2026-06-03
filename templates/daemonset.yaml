@@ -1,0 +1,120 @@
+{{- range $name, $updater := .Values.nodeFileUpdaters }}
+{{- if not $updater.hostPath }}
+{{- fail (printf "nodeFileUpdaters.%s: 'hostPath' is required" $name) }}
+{{- end }}
+{{- if and (not $updater.command) (not $updater.secretName) }}
+{{- fail (printf "nodeFileUpdaters.%s: built-in sync mode requires 'secretName' (or set 'command' for custom mode)" $name) }}
+{{- end }}
+{{- $image := $updater.image | default $.Values.image }}
+{{- $dsName := include "node-filesystem-updater.updaterName" (dict "root" $ "name" $name) }}
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: {{ $dsName }}
+  namespace: {{ $.Release.Namespace }}
+  labels:
+    {{- include "node-filesystem-updater.labels" $ | nindent 4 }}
+    node-filesystem-updater/updater: {{ $name }}
+spec:
+  selector:
+    matchLabels:
+      {{- include "node-filesystem-updater.selectorLabels" $ | nindent 6 }}
+      node-filesystem-updater/updater: {{ $name }}
+  updateStrategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 100%
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        {{- include "node-filesystem-updater.selectorLabels" $ | nindent 8 }}
+        node-filesystem-updater/updater: {{ $name }}
+    spec:
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 0
+      {{- with $updater.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- if $updater.hostNetwork }}
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
+      {{- end }}
+      tolerations:
+        {{- toYaml ($updater.tolerations | default (list (dict "effect" "NoSchedule" "operator" "Exists"))) | nindent 8 }}
+      containers:
+      - name: file-syncer
+        image: "{{ $image.repository }}:{{ $image.tag }}"
+        imagePullPolicy: {{ $image.pullPolicy | default "IfNotPresent" }}
+        {{- if $updater.command }}
+        command:
+          {{- toYaml $updater.command | nindent 10 }}
+        {{- with $updater.args }}
+        args:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+        {{- else }}
+        command: ["/bin/bash", "/opt/node-filesystem-updater.sh"]
+        {{- end }}
+        env:
+        - name: FILE_PERMISSIONS
+          value: {{ $updater.filePermissions | default "0600" | quote }}
+        - name: SYNC_INTERVAL
+          value: {{ $updater.syncInterval | default $.Values.syncInterval | quote }}
+        {{- with $updater.extraEnv }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+        {{- /* hardened default; root is required to write the host filesystem, but no privileges.
+               Per-updater 'securityContext' is deep-merged over this default (set a key to override it,
+               e.g. readOnlyRootFilesystem: false for a command that writes to its own root FS). */}}
+        {{- $defaultSecurityContext := dict
+              "runAsUser" 0
+              "runAsGroup" 0
+              "runAsNonRoot" false
+              "privileged" false
+              "allowPrivilegeEscalation" false
+              "capabilities" (dict "drop" (list "ALL"))
+              "readOnlyRootFilesystem" true }}
+        securityContext:
+          {{- toYaml (mergeOverwrite $defaultSecurityContext (deepCopy ($updater.securityContext | default dict))) | nindent 10 }}
+        resources:
+          {{- toYaml ($updater.resources | default $.Values.resources) | nindent 10 }}
+        volumeMounts:
+        {{- if $updater.secretName }}
+        - name: secret-files
+          mountPath: /sources
+          readOnly: true
+        {{- end }}
+        - name: target-dir
+          mountPath: /host-dir
+        {{- if not $updater.command }}
+        - name: script
+          mountPath: /opt
+        {{- end }}
+        {{- with $updater.extraVolumeMounts }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      volumes:
+      {{- if $updater.secretName }}
+      - name: secret-files
+        projected:
+          sources:
+          - secret:
+              name: {{ $updater.secretName }}
+      {{- end }}
+      - name: target-dir
+        hostPath:
+          path: {{ $updater.hostPath }}
+          type: DirectoryOrCreate
+      {{- if not $updater.command }}
+      - name: script
+        configMap:
+          name: {{ $dsName }}-script
+          defaultMode: 0755
+      {{- end }}
+      {{- with $updater.extraVolumes }}
+      {{- toYaml . | nindent 6 }}
+      {{- end }}
+{{- end }}

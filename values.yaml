@@ -1,0 +1,84 @@
+# Default container image for the file-sync container.
+# Must provide bash, cmp and install (the built-in sync script uses them).
+# Overridable per updater entry via `.image`.
+image:
+  repository: registry.gitlab.com/sylva-projects/sylva-elements/container-images/kube-job
+  # renovate: datasource=docker depName=registry.gitlab.com/sylva-projects/sylva-elements/container-images/kube-job
+  tag: v1.6.1
+  pullPolicy: IfNotPresent
+
+# Default interval (seconds) between sync loops of the built-in script.
+# Overridable per updater entry via `.syncInterval`.
+syncInterval: 30
+
+# Default pod resources, overridable per updater entry via `.resources`.
+resources:
+  requests:
+    cpu: 1m
+    memory: 8Mi
+  limits:
+    cpu: 100m
+    memory: 32Mi
+
+# Map of node-filesystem updaters. Each entry produces exactly one DaemonSet
+# named "<release>-<key>". The map is intentionally additive: consumers (e.g.
+# Sylva environment overlays) extend it with their own entries.
+#
+# Two modes per entry:
+#
+#   * built-in sync mode (default): the chart ships a sync script that copies each
+#     KEY of the projected `secretName` Secret to `<hostPath>/<KEY>` (the Secret key
+#     is the filename, its value is the content), keeping them up to date (kubelet
+#     refreshes the projected Secret volume, the script writes changed files through
+#     the hostPath mount). Use this to push a Secret onto the node filesystem without
+#     a CAPI rolling update. `hostPath` is the real node directory; the pod sees it at
+#     the fixed mount point /host-dir.
+#
+#   * custom command mode: set `command` (and optionally `args`) to run anything.
+#     The hostPath is still mounted at /host-dir; `secretName` projection and the
+#     built-in script ConfigMap are omitted. Use `extraVolumes`/`extraVolumeMounts`
+#     for additional host paths (e.g. a KMS socket directory). This covers cases
+#     where the file content is generated inside the pod rather than copied from a
+#     Secret.
+#
+nodeFileUpdaters: {}
+  # kms-encryption-config:
+  #   # --- built-in sync mode ---
+  #   secretName: kms-encryption-config                 # Secret whose KEYS become filenames on the node
+  #   hostPath: /etc/kubernetes/kms                     # real node dir to write into (pod sees it at /host-dir)
+  #   filePermissions: "0600"                           # mode applied to written files (default 0600)
+  #   syncInterval: 30                                  # optional per-entry override
+  #   nodeSelector:                                     # which nodes run this DaemonSet
+  #     node-role.kubernetes.io/control-plane: ""
+  #   tolerations:                                      # optional, defaults to "tolerate NoSchedule"
+  #     - effect: NoSchedule
+  #       operator: Exists
+  #   image: {}                                         # optional per-entry image override
+  #   resources: {}                                     # optional per-entry resources override
+  #   securityContext: {}                               # optional; deep-merged over the hardened default
+  #                                                     #   (root, no privileges, all caps dropped,
+  #                                                     #   readOnlyRootFilesystem). Set individual keys to
+  #                                                     #   override, e.g. readOnlyRootFilesystem: false.
+  #   hostNetwork: false                                # set true + hostNetwork DNS for socket use cases
+  #   extraEnv: []                                      # optional extra env vars on the container
+  #   extraVolumes: []                                  # optional extra pod volumes
+  #   extraVolumeMounts: []                             # optional extra container volume mounts
+  #
+  # vault-kms-config-updater:
+  #   # --- custom command mode ---
+  #   hostPath: /etc/kubernetes/kms
+  #   nodeSelector:
+  #     node-role.kubernetes.io/control-plane: ""
+  #   command: ["/bin/sh", "-c"]
+  #   args:
+  #     - |
+  #       set -e
+  #       # ...
+  #   extraVolumes:
+  #     - name: kms-socket
+  #       hostPath:
+  #         path: /opt/kms
+  #         type: DirectoryOrCreate
+  #   extraVolumeMounts:
+  #     - name: kms-socket
+  #       mountPath: /opt/kms

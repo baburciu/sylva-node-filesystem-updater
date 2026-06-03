@@ -1,0 +1,17 @@
+{{- range $name, $updater := .Values.nodeFileUpdaters }}
+{{- if not $updater.command }}
+{{- $dsName := include "node-filesystem-updater.updaterName" (dict "root" $ "name" $name) }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ $dsName }}-script
+  namespace: {{ $.Release.Namespace }}
+  labels:
+    {{- include "node-filesystem-updater.labels" $ | nindent 4 }}
+    node-filesystem-updater/updater: {{ $name }}
+data:
+  node-filesystem-updater.sh: |
+{{ $.Files.Get "scripts/node-filesystem-updater.sh" | indent 4 }}
+{{- end }}
+{{- end }}

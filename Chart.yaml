@@ -1,0 +1,13 @@
+apiVersion: v2
+name: node-filesystem-updater
+description: >-
+  Deploys one DaemonSet per entry of a "node file updaters" map, each keeping a
+  set of files on the host (node) filesystem in sync with the contents of a
+  Kubernetes Secret. Files are written through a hostPath mount, so they can be
+  updated on already-provisioned CAPI nodes without triggering a rolling update.
+  Each updater can instead run a fully custom command (e.g. to generate the file
+  content inline), making the chart a generic building block for "write/refresh a
+  file on the node OS filesystem from in-cluster state".
+type: application
+version: 0.1.0
+appVersion: "0.0.0"

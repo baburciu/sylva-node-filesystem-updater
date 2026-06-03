@@ -1,0 +1,150 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "title": "Schema for node-filesystem-updater chart values",
+  "type": "object",
+  "additionalProperties": false,
+  "$defs": {
+    "image": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "repository",
+        "tag"
+      ],
+      "properties": {
+        "repository": {
+          "type": "string"
+        },
+        "tag": {
+          "type": "string"
+        },
+        "pullPolicy": {
+          "type": "string",
+          "enum": [
+            "Always",
+            "IfNotPresent",
+            "Never"
+          ]
+        }
+      }
+    },
+    "resources": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "nodeFileUpdater": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "hostPath"
+      ],
+      "anyOf": [
+        {
+          "required": [
+            "secretName"
+          ]
+        },
+        {
+          "required": [
+            "command"
+          ]
+        }
+      ],
+      "properties": {
+        "hostPath": {
+          "type": "string",
+          "minLength": 1
+        },
+        "secretName": {
+          "type": "string"
+        },
+        "filePermissions": {
+          "type": "string",
+          "pattern": "^[0-7]{3,4}$"
+        },
+        "syncInterval": {
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "command": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "args": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "nodeSelector": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "tolerations": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        },
+        "hostNetwork": {
+          "type": "boolean"
+        },
+        "image": {
+          "$ref": "#/$defs/image"
+        },
+        "resources": {
+          "$ref": "#/$defs/resources"
+        },
+        "securityContext": {
+          "type": "object",
+          "description": "Deep-merged over the chart's hardened default securityContext."
+        },
+        "extraEnv": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        },
+        "extraVolumes": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        },
+        "extraVolumeMounts": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        }
+      }
+    }
+  },
+  "properties": {
+    "image": {
+      "$ref": "#/$defs/image"
+    },
+    "syncInterval": {
+      "type": [
+        "integer",
+        "string"
+      ]
+    },
+    "resources": {
+      "$ref": "#/$defs/resources"
+    },
+    "nodeFileUpdaters": {
+      "type": "object",
+      "description": "Map of updaters; each key produces one DaemonSet. Intentionally additive.",
+      "additionalProperties": {
+        "$ref": "#/$defs/nodeFileUpdater"
+      }
+    }
+  }
+}

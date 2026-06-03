@@ -1,0 +1,35 @@
+# Sample values exercising both modes, used for `helm template` smoke tests.
+nodeFileUpdaters:
+
+  # built-in sync mode: push a Secret onto the control-plane node filesystem
+  kms-encryption-config:
+    secretName: kms-encryption-config
+    hostPath: /etc/kubernetes/kms
+    filePermissions: "0600"
+    nodeSelector:
+      node-role.kubernetes.io/control-plane: ""
+
+  # custom command mode: generate a file inline and wait on a host socket
+  vault-kms-config-updater:
+    hostPath: /etc/kubernetes/kms
+    hostNetwork: true
+    nodeSelector:
+      node-role.kubernetes.io/control-plane: ""
+    command: ["/bin/sh", "-c"]
+    args:
+      - |
+        set -e
+        until [ -S /opt/kms/vaultkms.socket ]; do sleep 5; done
+        cat > /host-dir/encryption-config.yaml <<EOF
+        apiVersion: apiserver.config.k8s.io/v1
+        kind: EncryptionConfiguration
+        EOF
+        sleep infinity
+    extraVolumes:
+      - name: kms-socket
+        hostPath:
+          path: /opt/kms
+          type: DirectoryOrCreate
+    extraVolumeMounts:
+      - name: kms-socket
+        mountPath: /opt/kms
